@@ -18,7 +18,7 @@ func main() {
 		log.Fatalf("load config: %v", err)
 	}
 
-	schemaText, err := schema.LoadPromptSchema(cfg.SchemaSQLPath, cfg.PromptMaxBytes)
+	schemaText, err := schema.LoadRawSchema(cfg.SchemaSQLPath)
 	if err != nil {
 		log.Fatalf("load schema: %v", err)
 	}
@@ -32,7 +32,17 @@ func main() {
 	}
 
 	llmClient := llm.NewClient(cfg.OpenAIAPIKey, cfg.OpenAIBaseURL, cfg.OpenAIModel)
-	svc := service.New(llmClient, schemaText, glossary, examples, cfg.DefaultRowLimit, cfg.MaxRowLimit, cfg.GuardRepairTries)
+	svc := service.New(
+		llmClient,
+		schemaText,
+		glossary,
+		examples,
+		cfg.DefaultRowLimit,
+		cfg.MaxRowLimit,
+		cfg.GuardRepairTries,
+		cfg.RecallTopK,
+		cfg.RecallMaxBytes,
+	)
 	h := httpapi.NewHandler(svc)
 
 	mux := http.NewServeMux()

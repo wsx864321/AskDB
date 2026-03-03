@@ -5,6 +5,7 @@ import (
 	"fmt"
 
 	"askdb/internal/llm"
+	"askdb/internal/retrieval"
 	"askdb/internal/schema"
 	"askdb/internal/sqlguard"
 )
@@ -17,6 +18,9 @@ type Service struct {
 	defaultRowLimit  int
 	maxRowLimit      int
 	guardRepairTries int
+	recallTopK       int
+	recallMaxBytes   int
+	retriever        *retrieval.Retriever
 }
 
 type Request struct {
@@ -26,12 +30,13 @@ type Request struct {
 }
 
 type Response struct {
-	SQL       string `json:"sql"`
-	Reasoning string `json:"reasoning,omitempty"`
-	Attempts  int    `json:"attempts"`
+	SQL            string `json:"sql"`
+	Reasoning      string `json:"reasoning,omitempty"`
+	Attempts       int    `json:"attempts"`
+	RecalledTables int    `json:"recalled_tables"`
 }
 
-func New(llmClient *llm.Client, schemaText, glossary string, examples []schema.Example, defaultLimit, maxLimit, guardRepairTries int) *Service {
+func New(llmClient *llm.Client, schemaText, glossary string, examples []schema.Example, defaultLimit, maxLimit, guardRepairTries, recallTopK, recallMaxBytes int) *Service {
 	return &Service{
 		llm:              llmClient,
 		schemaText:       schemaText,
@@ -40,6 +45,9 @@ func New(llmClient *llm.Client, schemaText, glossary string, examples []schema.E
 		defaultRowLimit:  defaultLimit,
 		maxRowLimit:      maxLimit,
 		guardRepairTries: guardRepairTries,
+		recallTopK:       recallTopK,
+		recallMaxBytes:   recallMaxBytes,
+		retriever:        retrieval.New(schemaText),
 	}
 }
 
@@ -59,7 +67,13 @@ func (s *Service) Generate(ctx context.Context, req Request) (*Response, error) 
 		rowLimit = s.maxRowLimit
 	}
 
-	gen, err := s.llm.GenerateSQL(ctx, s.schemaText, s.glossary, req.Question, s.examples, rowLimit)
+	recalledSchema := s.retriever.BuildPromptSchema(req.Question, s.glossary, s.recallTopK, s.recallMaxBytes)
+	if recalledSchema == "" {
+		recalledSchema = s.schemaText
+	}
+	recalledCount := len(schema.ExtractTableBlocks(recalledSchema))
+
+	gen, err := s.llm.GenerateSQL(ctx, recalledSchema, s.glossary, req.Question, s.examples, rowLimit)
 	if err != nil {
 		return nil, err
 	}
@@ -70,12 +84,12 @@ func (s *Service) Generate(ctx context.Context, req Request) (*Response, error) 
 	for {
 		safeSQL, guardErr := sqlguard.EnforceReadOnly(sqlCandidate, rowLimit, s.maxRowLimit)
 		if guardErr == nil {
-			return &Response{SQL: safeSQL, Reasoning: reason, Attempts: attempts}, nil
+			return &Response{SQL: safeSQL, Reasoning: reason, Attempts: attempts, RecalledTables: recalledCount}, nil
 		}
 		if attempts > s.guardRepairTries {
 			return nil, fmt.Errorf("sql guard failed after %d attempts: %w", attempts, guardErr)
 		}
-		fix, err := s.llm.RepairSQL(ctx, s.schemaText, s.glossary, req.Question, sqlCandidate, guardErr.Error(), rowLimit)
+		fix, err := s.llm.RepairSQL(ctx, recalledSchema, s.glossary, req.Question, sqlCandidate, guardErr.Error(), rowLimit)
 		if err != nil {
 			return nil, fmt.Errorf("sql guard failed (%v) and repair failed: %w", guardErr, err)
 		}

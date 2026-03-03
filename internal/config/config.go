@@ -18,6 +18,8 @@ type Config struct {
 	DefaultRowLimit  int
 	MaxRowLimit      int
 	GuardRepairTries int
+	RecallTopK       int
+	RecallMaxBytes   int
 }
 
 func Load() (*Config, error) {
@@ -33,6 +35,8 @@ func Load() (*Config, error) {
 		DefaultRowLimit:  getEnvInt("DEFAULT_ROW_LIMIT", 100),
 		MaxRowLimit:      getEnvInt("MAX_ROW_LIMIT", 1000),
 		GuardRepairTries: getEnvInt("GUARD_REPAIR_TRIES", 2),
+		RecallTopK:       getEnvInt("RECALL_TOP_K", 12),
+		RecallMaxBytes:   getEnvInt("RECALL_MAX_BYTES", 60000),
 	}
 
 	if cfg.OpenAIAPIKey == "" {
@@ -43,6 +47,12 @@ func Load() (*Config, error) {
 	}
 	if cfg.GuardRepairTries < 0 || cfg.GuardRepairTries > 5 {
 		return nil, fmt.Errorf("GUARD_REPAIR_TRIES must be in [0,5]")
+	}
+	if cfg.RecallTopK <= 0 {
+		return nil, fmt.Errorf("RECALL_TOP_K must be > 0")
+	}
+	if cfg.RecallMaxBytes <= 0 {
+		return nil, fmt.Errorf("RECALL_MAX_BYTES must be > 0")
 	}
 	return cfg, nil
 }
