@@ -7,26 +7,32 @@ import (
 )
 
 type Config struct {
-	Port            string
-	OpenAIAPIKey    string
-	OpenAIBaseURL   string
-	OpenAIModel     string
-	SchemaSQLPath   string
-	PromptMaxBytes  int
-	DefaultRowLimit int
-	MaxRowLimit     int
+	Port             string
+	OpenAIAPIKey     string
+	OpenAIBaseURL    string
+	OpenAIModel      string
+	SchemaSQLPath    string
+	GlossaryPath     string
+	FewShotPath      string
+	PromptMaxBytes   int
+	DefaultRowLimit  int
+	MaxRowLimit      int
+	GuardRepairTries int
 }
 
 func Load() (*Config, error) {
 	cfg := &Config{
-		Port:            getEnv("PORT", "8080"),
-		OpenAIAPIKey:    os.Getenv("OPENAI_API_KEY"),
-		OpenAIBaseURL:   getEnv("OPENAI_BASE_URL", "https://api.openai.com/v1"),
-		OpenAIModel:     getEnv("OPENAI_MODEL", "gpt-4.1-mini"),
-		SchemaSQLPath:   getEnv("SCHEMA_SQL_PATH", "schema.sql"),
-		PromptMaxBytes:  getEnvInt("PROMPT_MAX_BYTES", 120000),
-		DefaultRowLimit: getEnvInt("DEFAULT_ROW_LIMIT", 100),
-		MaxRowLimit:     getEnvInt("MAX_ROW_LIMIT", 1000),
+		Port:             getEnv("PORT", "8080"),
+		OpenAIAPIKey:     os.Getenv("OPENAI_API_KEY"),
+		OpenAIBaseURL:    getEnv("OPENAI_BASE_URL", "https://api.openai.com/v1"),
+		OpenAIModel:      getEnv("OPENAI_MODEL", "gpt-4.1-mini"),
+		SchemaSQLPath:    getEnv("SCHEMA_SQL_PATH", "schema.sql"),
+		GlossaryPath:     getEnv("GLOSSARY_PATH", "glossary.md"),
+		FewShotPath:      getEnv("FEWSHOT_PATH", "fewshot.jsonl"),
+		PromptMaxBytes:   getEnvInt("PROMPT_MAX_BYTES", 120000),
+		DefaultRowLimit:  getEnvInt("DEFAULT_ROW_LIMIT", 100),
+		MaxRowLimit:      getEnvInt("MAX_ROW_LIMIT", 1000),
+		GuardRepairTries: getEnvInt("GUARD_REPAIR_TRIES", 2),
 	}
 
 	if cfg.OpenAIAPIKey == "" {
@@ -34,6 +40,9 @@ func Load() (*Config, error) {
 	}
 	if cfg.DefaultRowLimit <= 0 || cfg.MaxRowLimit <= 0 || cfg.DefaultRowLimit > cfg.MaxRowLimit {
 		return nil, fmt.Errorf("invalid row limit settings")
+	}
+	if cfg.GuardRepairTries < 0 || cfg.GuardRepairTries > 5 {
+		return nil, fmt.Errorf("GUARD_REPAIR_TRIES must be in [0,5]")
 	}
 	return cfg, nil
 }

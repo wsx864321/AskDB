@@ -1,0 +1,2 @@
+{"question":"统计近7天下单用户数","sql":"SELECT COUNT(DISTINCT user_id) AS user_cnt FROM orders WHERE created_at >= DATE_SUB(NOW(), INTERVAL 7 DAY)"}
+{"question":"查询最近30天支付成功订单总额","sql":"SELECT SUM(amount) AS total_amount FROM orders WHERE pay_status = 'paid' AND created_at >= DATE_SUB(NOW(), INTERVAL 30 DAY)"}

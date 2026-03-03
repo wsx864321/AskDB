@@ -5,14 +5,18 @@ import (
 	"fmt"
 
 	"askdb/internal/llm"
+	"askdb/internal/schema"
 	"askdb/internal/sqlguard"
 )
 
 type Service struct {
-	llm             *llm.Client
-	schemaText      string
-	defaultRowLimit int
-	maxRowLimit     int
+	llm              *llm.Client
+	schemaText       string
+	glossary         string
+	examples         []schema.Example
+	defaultRowLimit  int
+	maxRowLimit      int
+	guardRepairTries int
 }
 
 type Request struct {
@@ -24,10 +28,19 @@ type Request struct {
 type Response struct {
 	SQL       string `json:"sql"`
 	Reasoning string `json:"reasoning,omitempty"`
+	Attempts  int    `json:"attempts"`
 }
 
-func New(llmClient *llm.Client, schemaText string, defaultLimit, maxLimit int) *Service {
-	return &Service{llm: llmClient, schemaText: schemaText, defaultRowLimit: defaultLimit, maxRowLimit: maxLimit}
+func New(llmClient *llm.Client, schemaText, glossary string, examples []schema.Example, defaultLimit, maxLimit, guardRepairTries int) *Service {
+	return &Service{
+		llm:              llmClient,
+		schemaText:       schemaText,
+		glossary:         glossary,
+		examples:         examples,
+		defaultRowLimit:  defaultLimit,
+		maxRowLimit:      maxLimit,
+		guardRepairTries: guardRepairTries,
+	}
 }
 
 func (s *Service) Generate(ctx context.Context, req Request) (*Response, error) {
@@ -46,14 +59,28 @@ func (s *Service) Generate(ctx context.Context, req Request) (*Response, error) 
 		rowLimit = s.maxRowLimit
 	}
 
-	gen, err := s.llm.GenerateSQL(ctx, s.schemaText, req.Question, rowLimit)
-	if err != nil {
-		return nil, err
-	}
-	safeSQL, err := sqlguard.EnforceReadOnly(gen.SQL, rowLimit, s.maxRowLimit)
+	gen, err := s.llm.GenerateSQL(ctx, s.schemaText, s.glossary, req.Question, s.examples, rowLimit)
 	if err != nil {
 		return nil, err
 	}
 
-	return &Response{SQL: safeSQL, Reasoning: gen.Reasoning}, nil
+	attempts := 1
+	sqlCandidate := gen.SQL
+	reason := gen.Reasoning
+	for {
+		safeSQL, guardErr := sqlguard.EnforceReadOnly(sqlCandidate, rowLimit, s.maxRowLimit)
+		if guardErr == nil {
+			return &Response{SQL: safeSQL, Reasoning: reason, Attempts: attempts}, nil
+		}
+		if attempts > s.guardRepairTries {
+			return nil, fmt.Errorf("sql guard failed after %d attempts: %w", attempts, guardErr)
+		}
+		fix, err := s.llm.RepairSQL(ctx, s.schemaText, s.glossary, req.Question, sqlCandidate, guardErr.Error(), rowLimit)
+		if err != nil {
+			return nil, fmt.Errorf("sql guard failed (%v) and repair failed: %w", guardErr, err)
+		}
+		sqlCandidate = fix.SQL
+		reason = fix.Reasoning
+		attempts++
+	}
 }

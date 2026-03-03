@@ -7,11 +7,10 @@ import (
 	"strings"
 )
 
-var forbidden = regexp.MustCompile(`(?i)\b(insert|update|delete|drop|alter|truncate|create|replace|grant|revoke|call|execute|set|use|show)\b`)
+var forbidden = regexp.MustCompile(`(?i)\b(insert|update|delete|drop|alter|truncate|create|replace|grant|revoke|call|execute|set|use|show|outfile|load_file|into)\b`)
 
 func EnforceReadOnly(sql string, defaultLimit, maxLimit int) (string, error) {
-	s := strings.TrimSpace(sql)
-	s = strings.TrimSuffix(s, ";")
+	s := normalizeSQL(sql)
 	if s == "" {
 		return "", errors.New("empty sql")
 	}
@@ -27,19 +26,38 @@ func EnforceReadOnly(sql string, defaultLimit, maxLimit int) (string, error) {
 	}
 
 	if !strings.Contains(lower, " limit ") {
-		s = fmt.Sprintf("%s LIMIT %d", s, defaultLimit)
+		s = fmt.Sprintf("%s LIMIT %d", strings.TrimSpace(s), defaultLimit)
 		return s, nil
 	}
 
-	// Soft check for explicit numeric limit upper bound.
 	idx := strings.LastIndex(lower, " limit ")
 	if idx >= 0 {
 		part := strings.TrimSpace(lower[idx+7:])
 		n := 0
 		_, err := fmt.Sscanf(part, "%d", &n)
 		if err == nil && n > maxLimit {
-			s = s[:idx] + fmt.Sprintf(" LIMIT %d", maxLimit)
+			s = strings.TrimSpace(s[:idx]) + fmt.Sprintf(" LIMIT %d", maxLimit)
 		}
 	}
 	return s, nil
+}
+
+func normalizeSQL(sql string) string {
+	s := strings.TrimSpace(sql)
+	s = strings.TrimSuffix(s, ";")
+	lineParts := strings.Split(s, "\n")
+	clean := make([]string, 0, len(lineParts))
+	for _, line := range lineParts {
+		l := strings.TrimSpace(line)
+		if strings.HasPrefix(l, "--") || strings.HasPrefix(l, "#") {
+			continue
+		}
+		if i := strings.Index(l, "--"); i >= 0 {
+			l = strings.TrimSpace(l[:i])
+		}
+		if l != "" {
+			clean = append(clean, l)
+		}
+	}
+	return strings.Join(clean, " ")
 }
