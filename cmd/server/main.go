@@ -42,6 +42,9 @@ func main() {
 		cfg.GuardRepairTries,
 		cfg.RecallTopK,
 		cfg.RecallMaxBytes,
+		cfg.RecallBM25Weight,
+		cfg.RecallLexWeight,
+		cfg.RecallNameBoost,
 	)
 	h := httpapi.NewHandler(svc)
 

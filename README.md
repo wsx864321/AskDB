@@ -77,6 +77,9 @@ export GUARD_REPAIR_TRIES="2"
 # 表召回参数（100+表场景建议重点调优）
 export RECALL_TOP_K="12"
 export RECALL_MAX_BYTES="60000"
+export RECALL_LEXICAL_WEIGHT="1.0"
+export RECALL_BM25_WEIGHT="1.0"
+export RECALL_NAME_BOOST="8.0"
 ```
 
 ### 3) 启动服务
@@ -146,7 +149,7 @@ go run ./cmd/server
 ## 当前限制
 
 - 仅支持 MySQL 方言目标。
-- 表召回当前为词项匹配评分（轻量、无外部依赖），后续可升级 BM25/Embedding 召回。
+- 表召回当前为 Hybrid（关键词 + BM25）评分（轻量、无外部依赖），后续可升级 Embedding 融合召回。
 - 当前仅返回 SQL，不执行数据库查询。
 
 ## 协作说明（分支冲突处理）

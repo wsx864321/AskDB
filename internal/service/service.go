@@ -20,6 +20,9 @@ type Service struct {
 	guardRepairTries int
 	recallTopK       int
 	recallMaxBytes   int
+	recallBM25Weight float64
+	recallLexWeight  float64
+	recallNameBoost  float64
 	retriever        *retrieval.Retriever
 }
 
@@ -36,7 +39,7 @@ type Response struct {
 	RecalledTables int    `json:"recalled_tables"`
 }
 
-func New(llmClient *llm.Client, schemaText, glossary string, examples []schema.Example, defaultLimit, maxLimit, guardRepairTries, recallTopK, recallMaxBytes int) *Service {
+func New(llmClient *llm.Client, schemaText, glossary string, examples []schema.Example, defaultLimit, maxLimit, guardRepairTries, recallTopK, recallMaxBytes int, recallBM25Weight, recallLexWeight, recallNameBoost float64) *Service {
 	return &Service{
 		llm:              llmClient,
 		schemaText:       schemaText,
@@ -47,6 +50,9 @@ func New(llmClient *llm.Client, schemaText, glossary string, examples []schema.E
 		guardRepairTries: guardRepairTries,
 		recallTopK:       recallTopK,
 		recallMaxBytes:   recallMaxBytes,
+		recallBM25Weight: recallBM25Weight,
+		recallLexWeight:  recallLexWeight,
+		recallNameBoost:  recallNameBoost,
 		retriever:        retrieval.New(schemaText),
 	}
 }
@@ -67,7 +73,13 @@ func (s *Service) Generate(ctx context.Context, req Request) (*Response, error) 
 		rowLimit = s.maxRowLimit
 	}
 
-	recalledSchema := s.retriever.BuildPromptSchema(req.Question, s.glossary, s.recallTopK, s.recallMaxBytes)
+	recalledSchema := s.retriever.BuildPromptSchema(req.Question, s.glossary, retrieval.Options{
+		TopK:         s.recallTopK,
+		MaxBytes:     s.recallMaxBytes,
+		KeywordBoost: s.recallLexWeight,
+		BM25Weight:   s.recallBM25Weight,
+		NameBoost:    s.recallNameBoost,
+	})
 	if recalledSchema == "" {
 		recalledSchema = s.schemaText
 	}

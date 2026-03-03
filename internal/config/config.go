@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"os"
 	"strconv"
+	"strings"
 )
 
 type Config struct {
@@ -20,6 +21,9 @@ type Config struct {
 	GuardRepairTries int
 	RecallTopK       int
 	RecallMaxBytes   int
+	RecallBM25Weight float64
+	RecallLexWeight  float64
+	RecallNameBoost  float64
 }
 
 func Load() (*Config, error) {
@@ -37,6 +41,9 @@ func Load() (*Config, error) {
 		GuardRepairTries: getEnvInt("GUARD_REPAIR_TRIES", 2),
 		RecallTopK:       getEnvInt("RECALL_TOP_K", 12),
 		RecallMaxBytes:   getEnvInt("RECALL_MAX_BYTES", 60000),
+		RecallBM25Weight: getEnvFloat("RECALL_BM25_WEIGHT", 1.0),
+		RecallLexWeight:  getEnvFloat("RECALL_LEXICAL_WEIGHT", 1.0),
+		RecallNameBoost:  getEnvFloat("RECALL_NAME_BOOST", 8.0),
 	}
 
 	if cfg.OpenAIAPIKey == "" {
@@ -54,6 +61,9 @@ func Load() (*Config, error) {
 	if cfg.RecallMaxBytes <= 0 {
 		return nil, fmt.Errorf("RECALL_MAX_BYTES must be > 0")
 	}
+	if cfg.RecallBM25Weight < 0 || cfg.RecallLexWeight < 0 || cfg.RecallNameBoost < 0 {
+		return nil, fmt.Errorf("recall weights must be >= 0")
+	}
 	return cfg, nil
 }
 
@@ -69,6 +79,16 @@ func getEnvInt(key string, fallback int) int {
 		n, err := strconv.Atoi(v)
 		if err == nil {
 			return n
+		}
+	}
+	return fallback
+}
+
+func getEnvFloat(key string, fallback float64) float64 {
+	if v := os.Getenv(key); v != "" {
+		f, err := strconv.ParseFloat(strings.TrimSpace(v), 64)
+		if err == nil {
+			return f
 		}
 	}
 	return fallback
