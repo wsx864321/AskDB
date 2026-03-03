@@ -1,0 +1,7 @@
+-- 请替换为你的完整 MySQL 表结构与字段注释
+-- 示例：
+-- CREATE TABLE users (
+--   id BIGINT PRIMARY KEY,
+--   name VARCHAR(128) NOT NULL,
+--   created_at DATETIME NOT NULL
+-- ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
